@@ -1,0 +1,87 @@
+# Default values for ingress-nginx.
+
+name:
+cluster:
+environment:
+app:
+service:
+project: ingress-nginx
+squad: k8slb
+tribe: infra
+namespace:
+affinity: true
+
+config:
+  controller:
+    httpPort: 80
+
+image:
+  pullSecrets:
+  pullPolicy: IfNotPresent
+  controller:
+    repository: k8s.gcr.io/ingress-nginx/controller
+    tag: v0.35.0
+  aggregator:
+    repository: asia.gcr.io/cloudeng-prod-cicd/bukalapak/nginx-ingress-aggregator/aggregator
+    tag: v0.0.12
+
+ingress:
+  class:
+  type: internal
+  provider: google
+  googleNeg: false
+  globalAccess: false
+  forwardHeaders: false
+
+resources:
+  controller:
+    requests:
+      cpu: 4
+      memory: 4Gi
+    limits:
+      cpu: 4
+      memory: 4Gi
+  aggregator:
+    requests:
+      cpu: 1
+      memory: 1Gi
+    limits:
+      cpu: 1
+      memory: 1Gi
+
+rollingUpdate:
+  maxUnavailable: 0
+  maxSurge: 5%
+
+minReady: 60
+terminationGracePeriod: 300
+scaling:
+  replicas: 3
+  minReplicas: 3
+  maxReplicas: 24
+  targetUtilization: 50
+probe:
+  controller:
+    liveness:
+      initialDelay: 10
+      path: /healthz
+      successThreshold: 1
+      failureThreshold: 5
+      interval: 10
+      timeout: 10
+    readiness:
+      initialDelay: 10
+      path: /healthz
+      successThreshold: 1
+      failureThreshold: 1
+      interval: 4
+      timeout: 2
+  aggregator:
+    liveness:
+      initialDelay: 10
+      path: /healthz
+      successThreshold: 1
+      failureThreshold: 5
+      interval: 10
+      timeout: 10
+

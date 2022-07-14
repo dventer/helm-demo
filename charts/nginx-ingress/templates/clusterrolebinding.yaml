@@ -1,0 +1,36 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-clusterrolebinding
+  labels:
+    ingress-type: {{ $.Values.ingress.type }}
+    type: clusterrolebinding
+    {{- include "nginx-ingress.mandatoryMetadataLabels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-clusterrole
+subjects:
+- kind: ServiceAccount
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-serviceaccount
+  namespace: {{ default $.Release.Namespace $.Values.namespace }}
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-rolebinding
+  namespace: {{ default $.Release.Namespace $.Values.namespace }}
+  labels:
+    ingress-type: {{ $.Values.ingress.type }}
+    type: rolebinding
+    {{- include "nginx-ingress.mandatoryMetadataLabels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-role
+subjects:
+- kind: ServiceAccount
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-serviceaccount
+  namespace: {{ default $.Release.Namespace $.Values.namespace }}

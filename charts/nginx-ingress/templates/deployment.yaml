@@ -1,0 +1,187 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-deployment
+  namespace: {{ default $.Release.Namespace $.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $.Values.name }}
+    app.kubernetes.io/part-of: {{ $.Values.name }}
+    ingress-type: {{ $.Values.ingress.type }}
+    canary: "no"
+    type: deployment
+    {{- include "nginx-ingress.mandatoryMetadataLabels" . | nindent 4 }}
+spec:
+  revisionHistoryLimit: 10
+  minReadySeconds: {{ $.Values.minReady }}
+  replicas: {{ $.Values.scaling.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $.Values.name }}
+      app.kubernetes.io/part-of: {{ $.Values.name }}
+      project: {{ $.Values.project }}
+      service: {{ $.Values.service }}
+      app: {{ $.Values.name }}
+      env: {{ $.Values.environment }}
+      cluster: {{ $.Values.cluster }}
+      canary: "no"
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ $.Values.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ $.Values.rollingUpdate.maxUnavailable }}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $.Values.name }}
+        app.kubernetes.io/part-of: {{ $.Values.name }}
+        canary: "no"
+        {{- include "nginx-ingress.mandatoryMetadataLabels" . | nindent 8 }}
+      annotations:
+        ad.datadoghq.com/nginx-ingress-controller.check_names: '["openmetrics"]'
+        ad.datadoghq.com/nginx-ingress-controller.init_configs: '[{}]'
+        ad.datadoghq.com/nginx-ingress-controller.instances: |
+          [{
+            "prometheus_url": "http://%%host%%:8080/metrics",
+            "namespace": "{{ default $.Release.Namespace $.Values.namespace }}",
+            "metrics": ["*"],
+            "max_returned_metrics": 666666,
+            "send_histograms_buckets": false,
+            "tags": ["job:{{ $.Values.name }}-{{ $.Values.cluster }}","ingress-class:{{ required "Ingress class undefined!" $.Values.ingress.class }}"]
+          }]
+    spec:
+      {{- if $.Values.affinity }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ $.Values.name }}
+                - key: cluster
+                  operator: In
+                  values:
+                  - {{ $.Values.cluster }}
+              topologyKey: failure-domain.beta.kubernetes.io/zone
+            weight: 100
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ $.Values.name }}
+              - key: cluster
+                operator: In
+                values:
+                - {{ $.Values.cluster }}
+            topologyKey: kubernetes.io/hostname
+      {{- end }}
+      serviceAccountName: {{ $.Values.name }}-{{ $.Values.cluster }}-serviceaccount
+      terminationGracePeriodSeconds: {{ $.Values.terminationGracePeriod }}
+      priorityClassName: deployment-high-priority
+      imagePullSecrets:
+        - name: bukalapak-registry
+      containers:
+        #somehow metrics are tied to container name, cutomizing this leads no data on controller related metrics
+        - name: nginx-ingress-controller-orig
+          image: {{ $.Values.image.controller.repository }}:{{ $.Values.image.controller.tag }}
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                - /wait-shutdown
+          args:
+            - /nginx-ingress-controller
+            - --http-port={{ $.Values.config.controller.httpPort }}
+            - --configmap=$(POD_NAMESPACE)/{{ $.Values.name }}-{{ $.Values.cluster }}-configuration
+            - --tcp-services-configmap=$(POD_NAMESPACE)/{{ $.Values.name }}-{{ $.Values.cluster }}-tcp-services
+            - --udp-services-configmap=$(POD_NAMESPACE)/{{ $.Values.name }}-{{ $.Values.cluster }}-udp-services
+            - --publish-service=$(POD_NAMESPACE)/{{ $.Values.name }}-{{ $.Values.cluster }}-service
+            - --annotations-prefix=nginx.ingress.kubernetes.io
+            - --ingress-class={{ $.Values.ingress.class }}
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+            runAsUser: 101
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: http
+              containerPort: 80
+            - name: https
+              containerPort: 443
+          livenessProbe:
+            httpGet:
+              path: {{ $.Values.probe.controller.liveness.path }}
+              port: 10254
+              scheme: HTTP
+            initialDelaySeconds: {{ $.Values.probe.controller.liveness.initialDelay }}
+            periodSeconds: {{ $.Values.probe.controller.liveness.interval }}
+            timeoutSeconds: {{ $.Values.probe.controller.liveness.timeout }}
+            failureThreshold: {{ $.Values.probe.controller.liveness.failureThreshold }}
+            successThreshold: {{ $.Values.probe.controller.liveness.successThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ $.Values.probe.controller.readiness.path }}
+              port: 10254
+              scheme: HTTP
+            initialDelaySeconds: {{ $.Values.probe.controller.readiness.initialDelay }}
+            periodSeconds: {{ $.Values.probe.controller.readiness.interval }}
+            timeoutSeconds: {{ $.Values.probe.controller.readiness.timeout }}
+            failureThreshold: {{ $.Values.probe.controller.readiness.failureThreshold }}
+            successThreshold: {{ $.Values.probe.controller.readiness.successThreshold }}
+          resources:
+            limits:
+              cpu: {{ $.Values.resources.controller.limits.cpu }}
+              memory: {{ $.Values.resources.controller.limits.memory }}
+            requests:
+              cpu: {{ $.Values.resources.controller.requests.cpu }}
+              memory: {{ $.Values.resources.controller.requests.memory }}
+        - name: nginx-ingress-controller
+          args:
+            - -enable-profiling
+          image: {{ $.Values.image.aggregator.repository }}:{{ $.Values.image.aggregator.tag }}
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: {{ $.Values.probe.aggregator.liveness.path }}
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: {{ $.Values.probe.aggregator.liveness.initialDelay }}
+            periodSeconds: {{ $.Values.probe.aggregator.liveness.interval }}
+            timeoutSeconds: {{ $.Values.probe.aggregator.liveness.timeout }}
+            failureThreshold: {{ $.Values.probe.aggregator.liveness.failureThreshold }}
+            successThreshold: {{ $.Values.probe.aggregator.liveness.successThreshold }}
+          resources:
+            limits:
+              cpu: {{ $.Values.resources.aggregator.limits.cpu }}
+              memory: {{ $.Values.resources.aggregator.limits.memory }}
+            requests:
+              cpu: {{ $.Values.resources.aggregator.requests.cpu }}
+              memory: {{ $.Values.resources.aggregator.requests.memory }}
+          {{- if (eq $.Values.ingress.provider "azure") }}
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+            runAsUser: 101
+          {{- end }}

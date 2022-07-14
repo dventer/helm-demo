@@ -1,0 +1,7 @@
+---
+# Default values for rbac.
+name: 
+environment:
+project: project
+squad: squad
+

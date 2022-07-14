@@ -1,0 +1,19 @@
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-hpa
+  namespace: {{ default $.Release.Namespace $.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $.Values.name }}
+    app.kubernetes.io/part-of: {{ $.Values.name }}
+    ingress-type: {{ $.Values.ingress.type }}
+    type: hpa
+    {{- include "nginx-ingress.mandatoryMetadataLabels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $.Values.name }}-{{ $.Values.cluster }}-deployment
+  minReplicas: {{ $.Values.scaling.minReplicas }}
+  maxReplicas: {{ $.Values.scaling.maxReplicas }}
+  targetCPUUtilizationPercentage: {{ $.Values.scaling.targetUtilization }}

@@ -1,0 +1,72 @@
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-proxy-headers
+  namespace: {{ default $.Release.Namespace $.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $.Values.name }}
+    app.kubernetes.io/part-of: {{ $.Values.name }}
+    ingress-type: {{ $.Values.ingress.type }}
+    type: configmap
+    {{- include "nginx-ingress.mandatoryMetadataLabels" . | nindent 4 }}
+data:
+  X-Request-Start: t=${msec}
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-configuration
+  namespace: {{ default $.Release.Namespace $.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $.Values.name }}
+    app.kubernetes.io/part-of: {{ $.Values.name }}
+    ingress-type: {{ $.Values.ingress.type }}
+    type: configmap
+    {{- include "nginx-ingress.mandatoryMetadataLabels" . | nindent 4 }}
+data:
+  log-format-escape-json: "true"
+  log-format-upstream: '{"timestamp": "$msec", "bytes_sent": $bytes_sent, "body_bytes_sent":
+    "$body_bytes_sent", "http_referer": "$http_referer", "http_user_agent": "$http_user_agent",
+    "remote_address": "$remote_addr", "remote_user": "$remote_user", "request_id":
+    "$req_id", "request_length": $request_length, "request_method": "$request_method",
+    "request_path": "$uri", "request_query": "$args", "request_protocol": "$server_protocol",
+    "request_time_second": $request_time, "status": "$status", "vhost": "$host", "upstream_address":
+    "$upstream_addr", "upstream_name": "$proxy_upstream_name", "upstream_name_alternative":
+    "$proxy_alternative_upstream_name", "upstream_response_length": [$upstream_response_length],
+    "upstream_response_time_second": [$upstream_response_time], "upstream_status":
+    "$upstream_status", "namespace": "$namespace", "service": "$service_name", "ingress":
+    "$ingress_name", "request_bl_service": "$http_bl_service"}'
+  proxy-set-headers: {{ $.Values.name }}/{{ $.Values.name }}-{{ $.Values.cluster }}-proxy-headers
+  proxy-buffer-size: 32k
+  proxy-body-size: 32m
+  {{- if $.Values.ingress.forwardHeaders }}
+  use-forwarded-headers: "true"
+  {{ end }}
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-tcp-services
+  namespace: {{ default $.Release.Namespace $.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $.Values.name }}
+    app.kubernetes.io/part-of: {{ $.Values.name }}
+    ingress-type: {{ $.Values.ingress.type }}
+    type: configmap
+    {{- include "nginx-ingress.mandatoryMetadataLabels" . | nindent 4 }}
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-udp-services
+  namespace: {{ default $.Release.Namespace $.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $.Values.name }}
+    app.kubernetes.io/part-of: {{ $.Values.name }}
+    ingress-type: {{ $.Values.ingress.type }}
+    type: configmap
+    {{- include "nginx-ingress.mandatoryMetadataLabels" . | nindent 4 }}

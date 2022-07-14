@@ -1,0 +1,51 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: {{ $.Values.name }}-{{ $.Values.cluster }}-service
+  namespace: {{ default $.Release.Namespace $.Values.namespace }}
+  annotations:
+    {{- if and (eq $.Values.ingress.provider "google") ($.Values.ingress.googleNeg) }}
+    cloud.google.com/neg: '{ "exposed_ports": {"80": {}}}'
+    {{- end }}
+    {{- if and (eq $.Values.ingress.provider "google") (eq $.Values.ingress.type "internal") }}
+    cloud.google.com/load-balancer-type: "Internal"
+    {{- end }}
+    {{- if and (eq $.Values.ingress.provider "azure") (eq $.Values.ingress.type "internal") }}
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    {{- end }}
+    {{- if and (eq $.Values.ingress.provider "google") ($.Values.ingress.globalAccess) }}
+    networking.gke.io/internal-load-balancer-allow-global-access: "true"
+    {{- end }}
+  labels:
+    app.kubernetes.io/name: {{ $.Values.name }}
+    app.kubernetes.io/part-of: {{ $.Values.name }}
+    ingress-type: {{ $.Values.ingress.type }}
+    type: service
+    {{- include "nginx-ingress.mandatoryMetadataLabels" . | nindent 4 }}
+spec:
+  externalTrafficPolicy: Local
+  {{- if and ($.Values.ingress.googleNeg) (eq $.Values.ingress.provider "google") }}
+  type: ClusterIP
+  {{ else }}
+  type: LoadBalancer
+  {{- end }}
+  {{- if eq $.Values.ingress.type "internal" }}
+  loadBalancerSourceRanges:
+  - 10.0.0.0/8
+  - 172.16.0.0/12
+  {{- end }}
+  selector:
+    app.kubernetes.io/name: {{ $.Values.name }}
+    app.kubernetes.io/part-of: {{ $.Values.name }}
+    project: {{ $.Values.project }}
+    service: {{ $.Values.service }}
+    app: {{ $.Values.name }}
+    env: {{ $.Values.environment }}
+    cluster: {{ $.Values.cluster }}
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+  - name: https
+    port: 443
+    targetPort: https

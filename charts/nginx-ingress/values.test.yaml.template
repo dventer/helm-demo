@@ -1,0 +1,15 @@
+---
+name: ingress-nginx-test
+app: ingress-nginx-test
+service: ingress-nginx-test
+
+cluster: kink-pipeline
+environment: gitlab-ci
+
+affinity: false
+ingress:
+  class: nginx-test
+  forwardHeaders: true
+
+image:
+  pullSecrets: ${CI_REGISTRY_TOKEN}
